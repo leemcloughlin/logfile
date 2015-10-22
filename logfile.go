@@ -203,7 +203,7 @@ func New(lp *LogFile) (*LogFile, error) {
 type logMessage struct {
 	action logAction
 	data   []byte
-	closed chan<- bool
+	complete chan<- bool
 }
 
 type logAction int
@@ -254,11 +254,12 @@ func logger(lp *LogFile, ready chan (bool)) {
 				lp.writeLog(message.data)
 			case flushLog:
 				lp.flushLog()
+				message.complete <- true
 			case rotateLog:
 				lp.rotateLog()
 			case closeLog:
 				lp.closeLog()
-				message.closed <- true
+				message.complete <- true
 				return
 			}
 		case <-flushChan:
@@ -487,7 +488,9 @@ func (lp *LogFile) RotateFile() {
 }
 
 func (lp *LogFile) Flush() {
-	lp.messages <- logMessage{action: flushLog}
+	complete := make(chan bool)
+	lp.messages <- logMessage{action: flushLog, complete: complete}
+	<-complete
 }
 
 // Write is called by Log to write log entries.
@@ -504,8 +507,8 @@ func (lp *LogFile) Write(p []byte) (n int, err error) {
 
 // Close a log file opened by calling New()
 func (lp *LogFile) Close() {
-	closed := make(chan bool)
-	lp.messages <- logMessage{action: closeLog, closed: closed}
+	complete := make(chan bool)
+	lp.messages <- logMessage{action: closeLog, complete: complete}
 	// wait for the logfile to close
-	<-closed
+	<-complete
 }

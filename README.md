@@ -46,6 +46,24 @@ Command line arguments:
 	-logversions int
 	  	Default old versions of file to keep (otherwise deleted)
 
+Example:
+
+
+	logFileName := "example.log"
+	logFile, err := New(
+		&LogFile{
+			FileName: logFileName,
+			MaxSize:  500 * 1024,
+			Flags:    OverWriteOnStart})
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Failed to create log plus %s: %s\n", logFileName, err)
+		os.Exit(1)
+	}
+	
+	log.SetOutput(logFile)
+	log.Print("hello")
+	logFile.Close()
+
 
 
 
@@ -159,6 +177,8 @@ Close a log file opened by calling New()
 ``` go
 func (lp *LogFile) Flush()
 ```
+Flush writes any pending log entries out
+
 
 
 ### func (\*LogFile) PrintError
@@ -173,6 +193,8 @@ PrintError prints out internal errors to standard error (if not turned off by th
 ``` go
 func (lp *LogFile) RotateFile()
 ```
+RotateFile requests an immediate file rotation.
+
 
 
 ### func (\*LogFile) RotateFileFuncDefault

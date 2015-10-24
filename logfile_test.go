@@ -2,8 +2,8 @@
 package logfile
 
 import (
-	"io/ioutil"
 	"fmt"
+	"io/ioutil"
 	"log"
 	"os"
 	"testing"
@@ -22,24 +22,24 @@ func Test_DefaultCreate(t *testing.T) {
 
 	log.SetFlags(0)
 	log.SetOutput(logFile)
-	
+
 	msg := "hello\n"
 	log.Print(msg)
 	logFile.Close()
-	
+
 	fi, err := os.Stat(logFileName)
 	if err != nil {
 		t.Errorf("Failed to create log file %s: %s\n", logFileName, err)
 		return
 	}
-	
+
 	contents, err := ioutil.ReadFile(logFileName)
 	if err != nil {
 		t.Errorf("Failed to read log file %s: %s\n", logFileName, err)
 		return
 	}
 
-    size := int64(len(msg))
+	size := int64(len(msg))
 	if fi.Size() != size {
 		t.Errorf("Wrong logfile size for %s expected %d got %d\n", logFileName, size, fi.Size())
 	} else if string(contents) != msg {
@@ -63,7 +63,7 @@ func Test_BigMessages(t *testing.T) {
 
 	log.SetFlags(0)
 	log.SetOutput(logFile)
-	
+
 	m := "I am a very long log message line to test that writing long lines to log files works\n"
 	msg := ""
 	for i := 0; i < 5; i++ {
@@ -71,20 +71,20 @@ func Test_BigMessages(t *testing.T) {
 	}
 	log.Print(msg)
 	logFile.Close()
-	
+
 	fi, err := os.Stat(logFileName)
 	if err != nil {
 		t.Errorf("Failed to create log file %s: %s\n", logFileName, err)
 		return
 	}
-	
+
 	contents, err := ioutil.ReadFile(logFileName)
 	if err != nil {
 		t.Errorf("Failed to read log file %s: %s\n", logFileName, err)
 		return
 	}
 
-    size := int64(len(msg))
+	size := int64(len(msg))
 	if fi.Size() != size {
 		t.Errorf("Wrong logfile size for %s expected %d got %d\n", logFileName, size, fi.Size())
 	} else if string(contents) != msg {
@@ -136,7 +136,7 @@ func Test_AppendOnStart(t *testing.T) {
 	logFileName := "example.log"
 
 	os.Remove(logFileName)
-	
+
 	contents := "I AM GOING TO BE APPENDED TO\n"
 
 	f, err := os.Create(logFileName)
@@ -162,13 +162,13 @@ func Test_AppendOnStart(t *testing.T) {
 		return
 	}
 
-    size := int64(len(contents))
+	size := int64(len(contents))
 	if fi.Size() != size {
 		t.Errorf("Wrong logfile size for %s expected %d got %d\n", logFileName, size, fi.Size())
 	} else {
 		t.Log("Log Plus created and has correct size")
 	}
-	
+
 	os.Remove(logFileName)
 }
 
@@ -176,8 +176,9 @@ func ExampleLogFile() {
 	logFileName := "example.log"
 	logFile, err := New(
 		&LogFile{
-			FileName:     logFileName,
-			Flags:        OverWriteOnStart})
+			FileName: logFileName,
+			MaxSize:  500 * 1024,
+			Flags:    OverWriteOnStart})
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Failed to create log plus %s: %s\n", logFileName, err)
 		os.Exit(1)

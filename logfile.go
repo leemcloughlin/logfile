@@ -46,6 +46,22 @@ Command line arguments:
     	Default to no logging to stderr
   -logversions int
     	Default old versions of file to keep (otherwise deleted)
+
+Example:
+	logFileName := "example.log"
+	logFile, err := New(
+		&LogFile{
+			FileName: logFileName,
+			MaxSize:  500 * 1024, // 500K duh!
+			Flags:    OverWriteOnStart})
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Failed to create log plus %s: %s\n", logFileName, err)
+		os.Exit(1)
+	}
+
+	log.SetOutput(logFile)
+	log.Print("hello")
+	logFile.Close()
 */
 package logfile
 
@@ -54,7 +70,6 @@ import (
 	"flag"
 	"fmt"
 	"os"
-	"sync"
 	"time"
 )
 
@@ -72,8 +87,8 @@ var (
 
 const (
 	// Flags
-	FileOnly = 1 << iota // Log only to file, not to stderr
-	OverWriteOnStart // Note the default is to append
+	FileOnly         = 1 << iota // Log only to file, not to stderr
+	OverWriteOnStart             // Note the default is to append
 	RotateOnStart
 	NoErrors // Disables printing internal errors to stderr
 
@@ -138,7 +153,6 @@ type LogFile struct {
 	// the log file will be flushed after every write
 	FlushSeconds int
 
-	sync.Mutex
 	file        *os.File
 	lastChecked time.Time
 	size        int64
@@ -195,14 +209,14 @@ func New(lp *LogFile) (*LogFile, error) {
 	if !<-ready {
 		return lp, fmt.Errorf("LogFile failed to create file %s", lp.FileName)
 	}
-	
+
 	return lp, nil
 }
 
 // Messages sent to the log handling goroutine: logger
 type logMessage struct {
-	action logAction
-	data   []byte
+	action   logAction
+	data     []byte
 	complete chan<- bool
 }
 
@@ -242,7 +256,6 @@ func logger(lp *LogFile, ready chan (bool)) {
 	// Just in case... regularly check that this goroutine is still needed
 	errorTicker := time.NewTicker(time.Second * time.Duration(errorSeconds))
 	defer errorTicker.Stop()
-	
 
 	for {
 		select {
@@ -294,7 +307,7 @@ func (lp *LogFile) openLogFile(truncated bool) bool {
 	lp.closeLog()
 
 	var err error
-	
+
 	flags := os.O_RDWR | os.O_CREATE
 	if truncated {
 		flags = flags | os.O_TRUNC
@@ -331,7 +344,7 @@ func (lp *LogFile) openLogFile(truncated bool) bool {
 		lp.file = nil
 		return false
 	}
-	
+
 	return true
 }
 
@@ -483,10 +496,12 @@ func (lp *LogFile) RotateFileFuncDefault() {
 	}
 }
 
+// RotateFile requests an immediate file rotation.
 func (lp *LogFile) RotateFile() {
 	lp.messages <- logMessage{action: rotateLog}
 }
 
+// Flush writes any pending log entries out
 func (lp *LogFile) Flush() {
 	complete := make(chan bool)
 	lp.messages <- logMessage{action: flushLog, complete: complete}
@@ -505,7 +520,7 @@ func (lp *LogFile) Write(p []byte) (n int, err error) {
 	return pLen, nil
 }
 
-// Close a log file opened by calling New()
+// Close flushs any pending data out and then closes a log file opened by calling New()
 func (lp *LogFile) Close() {
 	complete := make(chan bool)
 	lp.messages <- logMessage{action: closeLog, complete: complete}

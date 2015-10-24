@@ -53,7 +53,7 @@ Example:
 	logFile, err := New(
 		&LogFile{
 			FileName: logFileName,
-			MaxSize:  500 * 1024,
+			MaxSize:  500 * 1024, // 500K duh!
 			Flags:    OverWriteOnStart})
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Failed to create log plus %s: %s\n", logFileName, err)
@@ -138,8 +138,6 @@ type LogFile struct {
     // If FlushSeconds is zero the default value is used. If less than zero
     // the log file will be flushed after every write
     FlushSeconds int
-
-    sync.Mutex
     // contains filtered or unexported fields
 }
 ```
@@ -169,7 +167,7 @@ Once finished with the LogFile call Close()
 ``` go
 func (lp *LogFile) Close()
 ```
-Close a log file opened by calling New()
+Close flushs any pending data out and then closes a log file opened by calling New()
 
 
 

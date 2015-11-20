@@ -55,7 +55,7 @@ Example:
 			MaxSize:  500 * 1024, // 500K duh!
 			Flags:    OverWriteOnStart})
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Failed to create log plus %s: %s\n", logFileName, err)
+		fmt.Fprintf(os.Stderr, "Failed to create log file %s: %s\n", logFileName, err)
 		os.Exit(1)
 	}
 
@@ -147,7 +147,7 @@ type LogFile struct {
 	OldVersions int
 
 	// FlushSeconds is how often the log file is writen out. Note that the log
-	// file will be writen to immdiagely if the buffer gets full or on the log
+	// file will be writen to immdiately if the buffer gets full or on the log
 	// file being closed.
 	// If FlushSeconds is zero the default value is used. If less than zero
 	// the log file will be flushed after every write

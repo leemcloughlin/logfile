@@ -27,40 +27,49 @@ LogFile supports the following features:
 	
 	There are command line flags to override default behavior (requires
 	flag.Parse to be called)
+	
+	Actually buffering can result in a lot less writes which is useful on devices
+	(like flash memory) that have limited write cycles. The downside is that
+	messages may be lost on panic or unplanned exit.
 
 Note that LogFile creates a goroutine on New. To ensure its deleted call Close
 
 Command line arguments:
 
 
-	-logcheckseconds int
-	  	Default seconds to check log file still exists (default 60)
-	-logfile string
-	  	Use as the filename for the first LogFile created without a filename
-	-logflushseconds int
-	  	Default seconds to wait before flushing pending writes to the log file (default 20)
-	-logmax int
-	  	Default maximum file size, 0 = no limit
-	-lognostderr
-	  	Default to no logging to stderr
-	-logversions int
-	  	Default old versions of file to keep (otherwise deleted)
+	  -logcheckseconds int
+	    	Default seconds to check log file still exists (default 60)
+	  -logfile string
+	    	Use as the filename for the first LogFile created without a filename
+	  -logflushseconds int
+	    	Default seconds to wait before flushing pending writes to the log file (default -1)
+			If <= 0 then the log is writen before returning.
+	  -logmax int
+	    	Default maximum file size, 0 = no limit
+	  -lognostderr
+	    	Default to no logging to stderr
+	  -logversions int
+	    	Default old versions of file to keep (otherwise deleted)
 
 Example:
 
 
-	logFileName := "example.log"
-	logFile, err := New(
-		&LogFile{
+	// was -logfile passed?
+	if logfile.Defaults.FileName != "" {
+		logFileName = logfile.Defaults.FileName
+	}
+	
+	logFile, err := logfile.New(
+		&logfile.LogFile{
 			FileName: logFileName,
 			MaxSize:  500 * 1024, // 500K duh!
-			Flags:    OverWriteOnStart})
+			Flags:    logfile.FileOnly | logfile.OverWriteOnStart})
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Failed to create log plus %s: %s\n", logFileName, err)
-		os.Exit(1)
+		log.Fatalf("Failed to create logFile %s: %s\n", logFileName, err)
 	}
 	
 	log.SetOutput(logFile)
+	
 	log.Print("hello")
 	logFile.Close()
 
@@ -79,6 +88,22 @@ const (
 )
 ```
 
+## Variables
+``` go
+var (
+    // These are the defaults for a LogFile. Most can be overridden on the command line
+    Defaults = LogFile{
+        Flags:        0,
+        FileName:     "",
+        FileMode:     0644,
+        MaxSize:      0,
+        OldVersions:  0,
+        CheckSeconds: 60,
+        FlushSeconds: -1,
+    }
+    NoStderr = false
+)
+```
 
 ## func FileNameVersion
 ``` go
@@ -133,10 +158,12 @@ type LogFile struct {
     OldVersions int
 
     // FlushSeconds is how often the log file is writen out. Note that the log
-    // file will be writen to immdiagely if the buffer gets full or on the log
+    // file will be writen to immdiately if the buffer gets full or on the log
     // file being closed.
     // If FlushSeconds is zero the default value is used. If less than zero
     // the log file will be flushed after every write
+    // CAUTION: If not the default (-1) then writes are buffered and may not be
+    // writen out if the program exits/panics
     FlushSeconds int
     // contains filtered or unexported fields
 }

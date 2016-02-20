@@ -31,6 +31,10 @@ LogFile supports the following features:
  There are command line flags to override default behavior (requires
  flag.Parse to be called)
 
+ Actually buffering can result in a lot less writes which is useful on devices
+ (like flash memory) that have limited write cycles. The downside is that
+ messages may be lost on panic or unplanned exit.
+
 Note that LogFile creates a goroutine on New. To ensure its deleted call Close
 
 Command line arguments:
@@ -39,7 +43,8 @@ Command line arguments:
   -logfile string
     	Use as the filename for the first LogFile created without a filename
   -logflushseconds int
-    	Default seconds to wait before flushing pending writes to the log file (default 20)
+    	Default seconds to wait before flushing pending writes to the log file (default -1)
+		If <= 0 then the log is writen before returning.
   -logmax int
     	Default maximum file size, 0 = no limit
   -lognostderr
@@ -48,18 +53,22 @@ Command line arguments:
     	Default old versions of file to keep (otherwise deleted)
 
 Example:
-	logFileName := "example.log"
-	logFile, err := New(
-		&LogFile{
+	// was -logfile passed?
+	if logfile.Defaults.FileName != "" {
+		logFileName = logfile.Defaults.FileName
+	}
+
+	logFile, err := logfile.New(
+		&logfile.LogFile{
 			FileName: logFileName,
 			MaxSize:  500 * 1024, // 500K duh!
-			Flags:    OverWriteOnStart})
+			Flags:    logfile.FileOnly | logfile.OverWriteOnStart})
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Failed to create log file %s: %s\n", logFileName, err)
-		os.Exit(1)
+		log.Fatalf("Failed to create logFile %s: %s\n", logFileName, err)
 	}
 
 	log.SetOutput(logFile)
+
 	log.Print("hello")
 	logFile.Close()
 */
@@ -75,14 +84,19 @@ import (
 
 var (
 	// These are the defaults for a LogFile. Most can be overridden on the command line
-	logfile      = ""
-	maxSize      int64
-	oldVersions              = 0
-	noStderr                 = false
-	checkSeconds             = 60
-	fileMode     os.FileMode = 0644
-	flushSeconds             = 20
-	errorSeconds             = 60
+	Defaults = LogFile{
+		Flags:        0,
+		FileName:     "",
+		FileMode:     0644,
+		MaxSize:      0,
+		OldVersions:  0,
+		CheckSeconds: 60,
+		FlushSeconds: -1, // Immediate write is the default
+	}
+	NoStderr = false
+
+	errorSeconds        = 60
+	defaultFileNameUsed = false
 )
 
 const (
@@ -97,12 +111,16 @@ const (
 )
 
 func init() {
-	flag.StringVar(&logfile, "logfile", "", "Use as the filename for the first LogFile created without a filename")
-	flag.Int64Var(&maxSize, "logmax", maxSize, "Default maximum file size, 0 = no limit")
-	flag.IntVar(&oldVersions, "logversions", oldVersions, "Default old versions of file to keep (otherwise deleted)")
-	flag.BoolVar(&noStderr, "lognostderr", noStderr, "Default to no logging to stderr")
-	flag.IntVar(&flushSeconds, "logflushseconds", flushSeconds, "Default seconds to wait before flushing pending writes to the log file")
-	flag.IntVar(&checkSeconds, "logcheckseconds", checkSeconds, "Default seconds to check log file still exists")
+	flag.StringVar(&Defaults.FileName, "logfile", Defaults.FileName, "Use as the filename for the first LogFile created without a filename")
+	flag.Int64Var(&Defaults.MaxSize, "logmax", Defaults.MaxSize, "Default maximum file size, 0 = no limit")
+	flag.IntVar(&Defaults.OldVersions, "logversions", Defaults.OldVersions, "Default old versions of file to keep (otherwise deleted)")
+	flag.BoolVar(&NoStderr, "lognostderr", NoStderr, "Default to no logging to stderr")
+	flag.IntVar(&Defaults.CheckSeconds, "logcheckseconds", Defaults.CheckSeconds, "Default seconds to check log file still exists")
+	flag.IntVar(&Defaults.FlushSeconds, "logflushseconds", Defaults.FlushSeconds, "Default seconds to wait before flushing pending writes to the log file")
+
+	if NoStderr {
+		Defaults.Flags = FileOnly
+	}
 }
 
 // LogFile implements an io.Writer so can used by the standard log library
@@ -151,6 +169,8 @@ type LogFile struct {
 	// file being closed.
 	// If FlushSeconds is zero the default value is used. If less than zero
 	// the log file will be flushed after every write
+	// CAUTION: If not the default (-1) then writes are buffered and may not be
+	// writen out if the program exits/panics
 	FlushSeconds int
 
 	file        *os.File
@@ -172,30 +192,32 @@ func New(lp *LogFile) (*LogFile, error) {
 		}
 	}
 	if lp.FileName == "" {
-		lp.FileName = logfile
-		// the logfile passed via the command line is only used once
-		logfile = ""
+		if !defaultFileNameUsed {
+			lp.FileName = Defaults.FileName
+			// the logfile passed via the command line is only used once
+			defaultFileNameUsed = true
+		}
 	}
 	if lp.FileName == "" {
 		return lp, fmt.Errorf("LogFile no file name")
 	}
 	if lp.FileMode == 0 {
-		lp.FileMode = fileMode
+		lp.FileMode = Defaults.FileMode
 	}
 	if lp.MaxSize == 0 {
-		lp.MaxSize = maxSize
+		lp.MaxSize = Defaults.MaxSize
 	}
 	if lp.RotateFileFunc == nil {
 		lp.RotateFileFunc = lp.RotateFileFuncDefault
 	}
 	if lp.CheckSeconds == 0 {
-		lp.CheckSeconds = checkSeconds
+		lp.CheckSeconds = Defaults.CheckSeconds
 	}
 	if lp.FlushSeconds == 0 {
-		lp.FlushSeconds = flushSeconds
+		lp.FlushSeconds = Defaults.FlushSeconds
 	}
 	if lp.Flags == 0 {
-		if noStderr {
+		if NoStderr {
 			lp.Flags = FileOnly
 		}
 	}
@@ -384,7 +406,7 @@ func (lp *LogFile) writeLog(p []byte) {
 	if err != nil {
 		lp.PrintError("Logfile error writing to %s: %s\n", lp.FileName, err)
 	}
-	if lp.FlushSeconds < 0 {
+	if lp.FlushSeconds <= 0 {
 		lp.flushLog()
 	}
 
@@ -517,6 +539,9 @@ func (lp *LogFile) Write(p []byte) (n int, err error) {
 	copy(buf, p)
 
 	lp.messages <- logMessage{action: writeLog, data: buf}
+	if lp.FlushSeconds <= 0 {
+		lp.Flush()
+	}
 	return pLen, nil
 }
 

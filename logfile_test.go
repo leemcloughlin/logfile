@@ -69,7 +69,7 @@ func Test_DefaultCreate(t *testing.T) {
 	}
 
 	// Pretend the -logfile flag was used
-	logfile = logFileName
+	Defaults.FileName = logFileName
 
 	logFile, err := New(nil)
 	if err != nil {
@@ -121,7 +121,7 @@ func Test_BigMessages(t *testing.T) {
 	}
 
 	// Flush and check every second
-	// Naughty: set the internall error check timer
+	// Naughty: set the internal error check timer
 	errorSeconds = 1
 	logFile, err := New(&LogFile{
 		FileName:     logFileName,
